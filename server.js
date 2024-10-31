@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const app = express();
 
 const jsonData = fs.readFileSync('tekton_tasks.data', 'utf-8');
@@ -32,19 +33,42 @@ const fuse = new Fuse(dataObject.data, fuseOptions);
 
 var mappings_data = {}
 
+function formatTimestamp()
+{
+  let now = new Date()
+  let options = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  }
+  // Date in YYYY-MM-DD, HH:MM:SS format
+  let date = now.toLocaleDateString('en-CA', options).replace(/\/+/g, '-');
+  return `${date}`;
+}
+
+
 app.get('/', function(req, res) {
+
   res.send('Jenkins -> Tekton HTTP Server is working!')
+
 });
 
 app.get('/tasks/data', function(req, res) {
-  res.status(200).json(dataObject);
+
   console.log('Tekton Tasks successfully retrieved!');
+  return res.status(200).json(dataObject);
+
 });
 
-// I am assuming that this is how the request body is sent to the /mappings API endpoint
-//{
-//  "plugins": ["git", "prometheus", "mailer"]
-//}
+/* I am assuming that this is how the request body is sent to the /mappings API endpoint
+{
+  "plugins": ["git", "prometheus", "mailer"]
+}*/
 app.post('/mappings', function(req, res) {
 
   let plugins = req.body.plugins
@@ -68,10 +92,33 @@ app.post('/mappings', function(req, res) {
 
 })
 
-app.use(function(req, res, next) {
+app.post('/report', function(req, res){
+
+  var markdownContent = ''
+  markdownContent += `# Migration Report\n\n`;
+  
+  let timestamp = formatTimestamp()
+  let filePath = path.join(__dirname, `${timestamp} - report.md`)
+
+  fs.writeFile(filePath, markdownContent, (err) => {
+
+    if(err){
+      return res.status(500).json({error: 'Error while writing to file'})
+    }
+
+    res.download(filePath, `${timestamp} - report.md`, (err) => {
+      if(err){
+        console.log('Error while downloading file')
+      }
+    })
+  })
+})
+
+app.use(function(req, res) {
   res.status(404).send('Sorry, that route doesnt exist yet!')
 });
 
 app.listen(3000, function(){
   console.log('HTTP Server is listening on port 3000')
+
 });
