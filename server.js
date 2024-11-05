@@ -43,7 +43,7 @@ function formatTimestamp()
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
+    hour12: true,
     timeZone: 'Asia/Kolkata',
   }
   // Date in YYYY-MM-DD, HH:MM:SS format
@@ -88,16 +88,53 @@ app.post('/mappings', function(req, res) {
     mappings_data[plugins[i]] = task_names
   }
 
-  res.status(200).json(mappings_data)
+  res.status(200).json({'message': 'Successully created mappings'})
 
 })
 
 app.post('/report', function(req, res){
+  
+  let timestamp = formatTimestamp()
+  let numberOfJenkinsPlugins = Object.keys(mappings_data).length
+  let numberOfEmptyMappings = 0
+  let numberOfNonEmptyMappings = 0
+  let supportedPercentage
+  let unsupportedPercentage
+  let supportedPlugins = ''
+  let unsupportedPlugins = ''
+
+  for(var key of Object.keys(mappings_data)) {
+    if(mappings_data[key].length == 0) {
+      numberOfEmptyMappings++;
+      unsupportedPlugins += `- ${key}  \n`
+    }
+    else {
+      numberOfNonEmptyMappings++;
+      supportedPlugins += `- ${key}  \n`
+    }
+  }
+
+  supportedPercentage = Math.round(numberOfNonEmptyMappings * 100 / numberOfJenkinsPlugins)
+  unsupportedPercentage = Math.round( 100 - supportedPercentage )
 
   var markdownContent = ''
   markdownContent += `# Migration Report\n\n`;
-  
-  let timestamp = formatTimestamp()
+  markdownContent += `Performed at: `
+  markdownContent += `${timestamp} IST  \n\n`
+  markdownContent += `#### Jenkins Plugins\n\n`
+  markdownContent += `Total: **`
+  markdownContent += `${numberOfJenkinsPlugins}**  \n\n`
+  markdownContent += `- Supported: **`
+  markdownContent += `${numberOfNonEmptyMappings} (`
+  markdownContent += `${supportedPercentage})**  \n`
+  markdownContent += `- Unsupported: **`
+  markdownContent += `${numberOfEmptyMappings} (`
+  markdownContent += `${unsupportedPercentage})**  \n\n`
+  markdownContent += `##### Supported\n\n`
+  markdownContent += `${supportedPlugins}  \n\n`
+  markdownContent += `##### Unsupported\n\n`
+  markdownContent += `${unsupportedPlugins}  \n\n`
+
   let filePath = path.join(__dirname, `${timestamp} - report.md`)
 
   fs.writeFile(filePath, markdownContent, (err) => {
@@ -106,11 +143,9 @@ app.post('/report', function(req, res){
       return res.status(500).json({error: 'Error while writing to file'})
     }
 
-    res.download(filePath, `${timestamp} - report.md`, (err) => {
-      if(err){
-        console.log('Error while downloading file')
-      }
-    })
+    console.log('Successfully created file at the server')
+    res.download(filePath, `${timestamp} - report.md`)
+    res.status(200).json({message: 'Successfully downloaded markdown file'})
   })
 })
 
