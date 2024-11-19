@@ -25,7 +25,8 @@ const fuseOptions = {
   // fieldNormWeight: 1,
   keys: [
     "name",
-    "latestVersion.description"
+    "latestVersion.description",
+    "tags.name"
   ]
 };
 
@@ -65,6 +66,20 @@ app.get('/tasks/data', function(req, res) {
 
 });
 
+app.get('/mappings', function(req, res){
+  let plugin = req.query.plugin_name
+  if(!plugin)
+    return res.status(400).send({error: 'Plugin Name is required'})
+
+  let plugin_mappings = mappings_data[plugin]
+  if(!plugin_mappings)
+    return res.status(404).send({error: 'Plugin Name not found'})
+
+  let obj = {}
+  obj[plugin] = plugin_mappings
+  res.status(200).send(obj)
+})
+
 /* I am assuming that this is how the request body is sent to the /mappings API endpoint
 {
   "plugins": ["git", "prometheus", "mailer"]
@@ -89,10 +104,9 @@ app.post('/mappings', function(req, res) {
   }
 
   res.status(200).json({'message': 'Successully created mappings'})
-
 })
 
-app.post('/report', function(req, res){
+app.get('/report', function(req, res){
   
   let timestamp = formatTimestamp()
   let numberOfJenkinsPlugins = Object.keys(mappings_data).length
