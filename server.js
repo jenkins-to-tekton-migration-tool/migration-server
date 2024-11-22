@@ -2,10 +2,43 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const app = express();
-
-const jsonData = fs.readFileSync('tekton_tasks.data', 'utf-8');
-const dataObject = JSON.parse(jsonData);
+const https = require('https')
 const Fuse = require('fuse.js');
+const url = 'https://api.hub.tekton.dev/v1/query?catalogs=Tekton&kinds=Task';
+const filePath = 'tekton_tasks.json';
+let fuse;
+
+function fetchAndReadData() {
+  https.get(url, (res) => {
+    let data = '';
+
+    // Accumulate data chunks
+    res.on('data', (chunk) => {
+      data += chunk;
+    });
+
+    // Process the response once complete
+    res.on('end', () => {
+      try {
+        const json_data_write = JSON.parse(data);
+
+        // Save the JSON data to a file
+        fs.writeFile(filePath, JSON.stringify(json_data_write, null, 2), 'utf8', (err) => {
+          if (err) {
+            console.error('Error writing to file:', err);
+          } else {
+            console.log(`Data saved to ${filePath}`);
+            fuse = new Fuse(json_data_write.data, fuseOptions);
+          }
+        });
+      } catch (err) {
+        console.error('Error parsing JSON:', err.message);
+      }
+    });
+  }).on('error', (err) => {
+    console.error('Error fetching data:', err.message);
+  });
+}
 
 app.use(express.json());
 
@@ -30,8 +63,6 @@ const fuseOptions = {
   ]
 };
 
-const fuse = new Fuse(dataObject.data, fuseOptions);
-
 var mappings_data = {}
 
 function formatTimestamp()
@@ -47,33 +78,19 @@ function formatTimestamp()
     hour12: true,
     timeZone: 'Asia/Kolkata',
   }
-  // Date in YYYY-MM-DD, HH:MM:SS format
+  // Date in YYYY-MM-DD, HH:MM:SS AM/PMformat
   let date = now.toLocaleDateString('en-CA', options).replace(/\/+/g, '-');
   return `${date}`;
 }
 
-
-app.get('/', function(req, res) {
-
-  res.send('Jenkins -> Tekton HTTP Server is working!')
-
-});
-
-app.get('/tasks/data', function(req, res) {
-
-  console.log('Tekton Tasks successfully retrieved!');
-  return res.status(200).json(dataObject);
-
-});
-
 app.get('/mappings', function(req, res){
-  let plugin = req.query.plugin_name
+  let plugin = req.query.plugin
   if(!plugin)
     return res.status(400).send({error: 'Plugin Name is required'})
 
   let plugin_mappings = mappings_data[plugin]
   if(!plugin_mappings)
-    return res.status(404).send({error: 'Plugin Name not found'})
+    return res.status(404).send({error: 'Mappings for this Jenkins Plugin was not found'})
 
   let obj = {}
   obj[plugin] = plugin_mappings
@@ -87,7 +104,6 @@ app.get('/mappings', function(req, res){
 app.post('/mappings', function(req, res) {
 
   let plugins = req.body.plugins
-  // console.log(plugins)
 
   for(let i = 0; i < plugins.length; i++)  
   {
@@ -103,10 +119,10 @@ app.post('/mappings', function(req, res) {
     mappings_data[plugins[i]] = task_names
   }
 
-  res.status(200).json({'message': 'Successully created mappings'})
+  res.status(201).json({'message': 'Successully created mappings'})
 })
 
-app.get('/report', function(req, res){
+app.post('/report', function(req, res){
   
   let timestamp = formatTimestamp()
   let numberOfJenkinsPlugins = Object.keys(mappings_data).length
@@ -152,14 +168,10 @@ app.get('/report', function(req, res){
   let filePath = path.join(__dirname, `${timestamp} - report.md`)
 
   fs.writeFile(filePath, markdownContent, (err) => {
-
     if(err){
       return res.status(500).json({error: 'Error while writing to file'})
     }
-
-    console.log('Successfully created file at the server')
-    res.download(filePath, `${timestamp} - report.md`)
-    res.status(200).json({message: 'Successfully downloaded markdown file'})
+    res.status(201).json({message: 'Successfully created markdown file'})
   })
 })
 
@@ -168,6 +180,6 @@ app.use(function(req, res) {
 });
 
 app.listen(3000, function(){
-  console.log('HTTP Server is listening on port 3000')
-
+  fetchAndReadData();
+  console.log('Migration Server is successfully set up and listening on port 3000')
 });
